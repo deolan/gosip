@@ -17,6 +17,7 @@ package sdp
 import (
 	"bytes"
 	"strconv"
+	"strings"
 )
 
 // Media is a high level representation of the c=/m=/a= lines for describing a
@@ -51,7 +52,7 @@ func (media *Media) Append(type_ string, b *bytes.Buffer) {
 func (media *Media) RemoveCodec(name string) bool {
 	dId := -1
 	for i, codec := range media.Codecs {
-		if codec.Name == name {
+		if strings.EqualFold(codec.Name, name) {
 			dId = i
 		}
 	}
@@ -67,7 +68,7 @@ func (media *Media) RemoveCodec(name string) bool {
 func (media *Media) RemoveCodecWithRate(name string, rate int) bool {
 	dId := -1
 	for i, codec := range media.Codecs {
-		if codec.Name == name && codec.Rate == rate {
+		if strings.EqualFold(codec.Name, name) && codec.Rate == rate {
 			dId = i
 		}
 	}
