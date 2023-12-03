@@ -80,6 +80,9 @@ import (
 const (
 	ContentType = "application/sdp"
 	MaxLength   = 1450
+	MediaLineStateNone = 0
+	MediaLineStateAudio = 1	
+	MediaLineStateVideo = 2
 )
 
 // SDP represents a Session Description Protocol SIP payload.
@@ -147,11 +150,18 @@ func Parse(s string) (sdp *SDP, err error) {
 	// We abstract the structure of the media lines so we need a place to store
 	// them before assembling the audio/video data structures.
 	var audioinfo, videoinfo string
-	rtpmaps := make([]string, len(lines))
-	rtpmapcnt := 0
-	fmtps := make([]string, len(lines))
-	fmtpcnt := 0
+	artpmaps := make([]string, len(lines))
+	artpmapcnt := 0
+	afmtps := make([]string, len(lines))
+	afmtpcnt := 0
+
+	vrtpmaps := make([]string, len(lines))
+	vrtpmapcnt := 0
+	vfmtps := make([]string, len(lines))
+	vfmtpcnt := 0
 	sdp.Attrs = make([][2]string, 0, len(lines))
+
+	medialinestate := MediaLineStateNone
 
 	// Extract information from SDP.
 	var okOrigin, okConn bool
@@ -166,8 +176,10 @@ func Parse(s string) (sdp *SDP, err error) {
 			line = line[2:]
 			if strings.HasPrefix(line, "audio ") {
 				audioinfo = line[6:]
+				medialinestate = MediaLineStateAudio
 			} else if strings.HasPrefix(line, "video ") {
 				videoinfo = line[6:]
+				medialinestate = MediaLineStateVideo
 			} else {
 				log.Println("Unsupported SDP media line:", line)
 			}
@@ -195,11 +207,27 @@ func Parse(s string) (sdp *SDP, err error) {
 			line = line[2:]
 			switch {
 			case strings.HasPrefix(line, "rtpmap:"):
-				rtpmaps[rtpmapcnt] = line[7:]
-				rtpmapcnt++
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping rtpmap: ", line)
+					case MediaLineStateAudio:
+						artpmaps[artpmapcnt] = line[7:]
+						artpmapcnt++
+					case MediaLineStateVideo:
+						vrtpmaps[vrtpmapcnt] = line[7:]
+						vrtpmapcnt++
+				}
 			case strings.HasPrefix(line, "fmtp:"):
-				fmtps[fmtpcnt] = line[5:]
-				fmtpcnt++
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping rtpmap: ", line)
+					case MediaLineStateAudio:
+						afmtps[afmtpcnt] = line[5:]
+						afmtpcnt++
+					case MediaLineStateVideo:
+						vfmtps[vfmtpcnt] = line[5:]
+						vfmtpcnt++
+				}
 			case strings.HasPrefix(line, "ptime:"):
 				ptimeS := line[6:]
 				if ptime, err := strconv.Atoi(ptimeS); err == nil && ptime > 0 {
@@ -365,8 +393,11 @@ func Parse(s string) (sdp *SDP, err error) {
 			}
 		}
 	}
-	rtpmaps = rtpmaps[0:rtpmapcnt]
-	fmtps = fmtps[0:fmtpcnt]
+
+	artpmaps = artpmaps[0:artpmapcnt]
+	afmtps = afmtps[0:afmtpcnt]
+	vrtpmaps = vrtpmaps[0:vrtpmapcnt]
+	vfmtps = vfmtps[0:vfmtpcnt]
 
 	if !okConn || !okOrigin {
 		return nil, errors.New("sdp missing mandatory information")
@@ -381,26 +412,27 @@ func Parse(s string) (sdp *SDP, err error) {
 		if err != nil {
 			return nil, err
 		}
-		err = populateCodecs(sdp.Audio, pts, rtpmaps, fmtps)
+		err = populateCodecs(sdp.Audio, pts, artpmaps, afmtps)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		sdp.Video = nil
+		 // sdp.Video = nil
 	}
 
 	if videoinfo != "" {
+
 		sdp.Video = new(Media)
 		sdp.Video.Port, sdp.Video.Proto, pts, err = parseMediaInfo(videoinfo)
 		if err != nil {
 			return nil, err
 		}
-		err = populateCodecs(sdp.Video, pts, rtpmaps, fmtps)
+		err = populateCodecs(sdp.Video, pts, vrtpmaps, vfmtps)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		sdp.Video = nil
+		 // sdp.Video = nil
 	}
 
 	if sdp.Audio == nil && sdp.Video == nil {
@@ -549,7 +581,7 @@ func (sdp *SDP) Append(b *bytes.Buffer) {
 //
 // If we couldn't find a matching rtpmap, iana standardized will be filled in
 // like magic.
-func populateCodecs(media *Media, pts []uint8, rtpmaps, fmtps []string) (err error) {
+func populateCodecs(media *Media, pts []uint8, rtpmaps []string, fmtps []string) (err error) {
 	media.Codecs = make([]Codec, len(pts))
 	for n, pt := range pts {
 		codec := &media.Codecs[n]
