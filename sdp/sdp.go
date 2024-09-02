@@ -94,20 +94,20 @@ type SDP struct {
 	Session  string      // s= Session Name (default "-")
 	Time     string      // t= Active Time (default "0 0")
 	Ptime    int         // Transmit frame every N milliseconds (default 20)
-	SendOnly bool        // True if 'a=sendonly' was specified in SDP
-	RecvOnly bool        // True if 'a=recvonly' was specified in SDP
-	Inactive bool        // True if 'a=inactive' was specified in SDP
-	Fprint  *Fingerprint // Fingerprint
-	IceUfrag string 	 // ICE Ufag
-	IcePwd 	 string 	 // ICE password
-	IceOnly  bool        // ICE trickle sdpfrag
-	Rtcp     *Rtcp       // RTCP
-	RtcpMux bool         // RTCP MUX attribute
+//	SendOnly bool        // True if 'a=sendonly' was specified in SDP
+//	RecvOnly bool        // True if 'a=recvonly' was specified in SDP
+//	Inactive bool        // True if 'a=inactive' was specified in SDP
+//	Fprint  *Fingerprint // Fingerprint
+//	IceUfrag string 	 // ICE Ufag
+//	IcePwd 	 string 	 // ICE password
+//	IceOnly  bool        // ICE trickle sdpfrag
+//	SetupRole string 	 // Setup attribute
+//	Candidates []Candidate // ICE candidates
+//	Rtcp     *Rtcp       // RTCP
+//	RtcpMux bool         // RTCP MUX attribute
+//	Ssrcs []Ssrc 		 // SSRC
 	Group    *Group      // Group bundle
-	SetupRole string 	 // Setup attribute
-	Candidates []Candidate // ICE candidates
-	Ssrcs []Ssrc 		 // SSRC
-	Attrs    [][2]string // a= lines we don't recognize
+//	Attrs    [][2]string // a= lines we don't recognize
 	Other    [][2]string // Other description
 }
 
@@ -125,7 +125,7 @@ func New(addr *net.UDPAddr, codecs ...Codec) *SDP {
 	for i := 0; i < len(codecs); i++ {
 		sdp.Audio.Codecs[i] = codecs[i]
 	}
-	sdp.Attrs = make([][2]string, 0, 8)
+	sdp.Audio.Attrs = make([][2]string, 0, 8)
 	return sdp
 }
 
@@ -155,11 +155,36 @@ func Parse(s string) (sdp *SDP, err error) {
 	afmtps := make([]string, len(lines))
 	afmtpcnt := 0
 
+	var aFprint *Fingerprint
+	var aIcePwd string
+	var aIceUfrag string
+	var aCandidates []Candidate
+	var aSsrcs []Ssrc
+	var aAttrs  = make([][2]string, 0, len(lines))
+	var aSendOnly bool
+	var aRecvOnly bool
+	var aInactive bool
+	var aSetupRole string
+	var aRtcpMux bool
+	var aRtcp Rtcp
+
 	vrtpmaps := make([]string, len(lines))
 	vrtpmapcnt := 0
 	vfmtps := make([]string, len(lines))
 	vfmtpcnt := 0
-	sdp.Attrs = make([][2]string, 0, len(lines))
+
+	var vFprint *Fingerprint
+	var vIcePwd string
+	var vIceUfrag string
+	var vCandidates []Candidate
+	var vSsrcs []Ssrc
+	var vAttrs  = make([][2]string, 0, len(lines))
+	var vSendOnly bool
+	var vRecvOnly bool
+	var vInactive bool
+	var vSetupRole string
+	var vRtcpMux bool
+	var vRtcp Rtcp
 
 	medialinestate := MediaLineStateNone
 
@@ -240,14 +265,37 @@ func Parse(s string) (sdp *SDP, err error) {
 				if toks == nil || len(toks) != 2 {
 					log.Println("Invalid SDP Fingerprint value")
 				} else {
-					sdp.Fprint = new(Fingerprint)
-					sdp.Fprint.HashFunc = toks[0]
-					sdp.Fprint.Fingerprint = toks[1]					
+					switch medialinestate {
+						case MediaLineStateNone:
+							log.Println("Skipping fingerprint: ", line)
+						case MediaLineStateAudio:
+							aFprint = new(Fingerprint)
+							aFprint.HashFunc = toks[0]
+							aFprint.Fingerprint = toks[1]
+						case MediaLineStateVideo:
+							vFprint = new(Fingerprint)
+							vFprint.HashFunc = toks[0]
+							vFprint.Fingerprint = toks[1]
+					}				
 				}
 			case strings.HasPrefix(line, "ice-pwd:"):
-				sdp.IcePwd = line[8:]
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping ice-pwd: ", line)
+					case MediaLineStateAudio:
+						aIcePwd = line[8:]
+					case MediaLineStateVideo:
+						vIcePwd = line[8:]
+				}
 			case strings.HasPrefix(line, "ice-ufrag:"):
-				sdp.IceUfrag = line[10:]
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping ice-ufrag: ", line)
+					case MediaLineStateAudio:
+						aIceUfrag = line[10:]
+					case MediaLineStateVideo:
+						vIceUfrag = line[10:]
+				}
 			case strings.HasPrefix(line, "candidate:"):
 				toks := strings.Split(line[10:], " ")
 				if toks == nil {
@@ -281,7 +329,14 @@ func Parse(s string) (sdp *SDP, err error) {
 							candidate.RelPort = relPort
 						}
  					}
- 					sdp.Candidates = append(sdp.Candidates, candidate)
+					switch medialinestate {
+						case MediaLineStateNone:
+							log.Println("Skipping candidate: ", line)
+						case MediaLineStateAudio:
+							aCandidates = append(aCandidates, candidate)
+						case MediaLineStateVideo:
+							vCandidates = append(vCandidates, candidate)
+					}	
 				}
 			case strings.HasPrefix(line, "ssrc:"):
 				toks := strings.Split(line[5:], ":")
@@ -297,7 +352,14 @@ func Parse(s string) (sdp *SDP, err error) {
 						if len(toks1) >= 2 {
 							ssrc.Attribute = toks1[1]
 						}
-						sdp.Ssrcs = append(sdp.Ssrcs, ssrc)
+						switch medialinestate {
+							case MediaLineStateNone:
+								log.Println("Skipping SSRC: ", line)
+							case MediaLineStateAudio:
+								aSsrcs = append(aSsrcs, ssrc)
+							case MediaLineStateVideo:
+								vSsrcs = append(vSsrcs, ssrc)
+						}						
 					}
 				} else {
 					toks1 := strings.Split(toks[0], " ")
@@ -314,7 +376,14 @@ func Parse(s string) (sdp *SDP, err error) {
 						if len(toks) >= 2 {						
 							ssrc.Value = toks[1]
 						}	 
-						sdp.Ssrcs = append(sdp.Ssrcs, ssrc)
+						switch medialinestate {
+							case MediaLineStateNone:
+								log.Println("Skipping SSRC: ", line)
+							case MediaLineStateAudio:
+								aSsrcs = append(aSsrcs, ssrc)
+							case MediaLineStateVideo:
+								vSsrcs = append(vSsrcs, ssrc)
+						}						
 					}
 				}
 			case strings.HasPrefix(line, "rtcp:"):
@@ -337,7 +406,15 @@ func Parse(s string) (sdp *SDP, err error) {
 							log.Println("Invalid SDP RTCP port value")
 						} else {
 							rtcp.Port = uint16(port)
-							sdp.Rtcp = &rtcp
+
+							switch medialinestate {
+								case MediaLineStateNone:
+									log.Println("Skipping rtcp: ", line)
+								case MediaLineStateAudio:
+									aRtcp = rtcp
+								case MediaLineStateVideo:
+									vRtcp = rtcp
+							}
 						}		
 					}		
 				}
@@ -353,29 +430,82 @@ func Parse(s string) (sdp *SDP, err error) {
 					}
 				}
 			case strings.HasPrefix(line, "setup:"):
-				sdp.SetupRole = line[6:]									
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping setup role: ", line)
+					case MediaLineStateAudio:
+						aSetupRole = line[6:]
+					case MediaLineStateVideo:
+						vSetupRole = line[6:]
+				}								
 			case line == "rtcp-mux":
-				sdp.RtcpMux = true
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping rtcp-mux: ", line)
+					case MediaLineStateAudio:
+						aRtcpMux= true
+					case MediaLineStateVideo:
+						vRtcpMux = true
+				}	
 			case line == "sendrecv":
 			case line == "sendonly":
-				sdp.SendOnly = true
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping setup: ", line)
+					case MediaLineStateAudio:
+						aSendOnly = true
+					case MediaLineStateVideo:
+						vSendOnly = true
+				}			
 			case line == "recvonly":
-				sdp.RecvOnly = true
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping setup: ", line)
+					case MediaLineStateAudio:
+						aRecvOnly = true
+					case MediaLineStateVideo:
+						vRecvOnly = true
+				}
 			case line == "inactive":
-				sdp.Inactive = true
+				switch medialinestate {
+					case MediaLineStateNone:
+						log.Println("Skipping setup: ", line)
+					case MediaLineStateAudio:
+						aInactive = true
+					case MediaLineStateVideo:
+						vInactive = true
+				}
 			default:
 				if n := strings.Index(line, ":"); n >= 0 {
 					if n == 0 {
 						log.Println("Evil SDP attribute:", line)
 					} else {
-						l := len(sdp.Attrs)
-						sdp.Attrs = sdp.Attrs[0 : l+1]
-						sdp.Attrs[l] = [2]string{line[0:n], line[n+1:]}
+						switch medialinestate {
+							case MediaLineStateNone:
+								log.Println("Skipping a: ", line)
+							case MediaLineStateAudio:
+								l := len(aAttrs)
+								aAttrs = aAttrs[0 : l+1]
+								aAttrs[l] = [2]string{line[0:n], line[n+1:]}
+							case MediaLineStateVideo:
+								l := len(vAttrs)
+								vAttrs = vAttrs[0 : l+1]
+								vAttrs[l] = [2]string{line[0:n], line[n+1:]}
+						}
 					}
 				} else {
-					l := len(sdp.Attrs)
-					sdp.Attrs = sdp.Attrs[0 : l+1]
-					sdp.Attrs[l] = [2]string{line, ""}
+					switch medialinestate {
+						case MediaLineStateNone:
+							log.Println("Skipping a: ", line)
+						case MediaLineStateAudio:
+							l := len(aAttrs)
+							aAttrs = aAttrs[0 : l+1]
+							aAttrs[l] = [2]string{line, ""}
+						case MediaLineStateVideo:
+							l := len(vAttrs)
+							vAttrs = vAttrs[0 : l+1]
+							vAttrs[l] = [2]string{line, ""}
+					}
 				}
 			}
 		default:
@@ -415,6 +545,19 @@ func Parse(s string) (sdp *SDP, err error) {
 		err = populateCodecs(sdp.Audio, pts, artpmaps, afmtps)
 		if err != nil {
 			return nil, err
+		} else {
+			sdp.Audio.Fprint = aFprint
+			sdp.Audio.IcePwd = aIcePwd
+			sdp.Audio.IceUfrag = aIceUfrag
+			sdp.Audio.Candidates = aCandidates
+			sdp.Audio.Ssrcs = aSsrcs
+			sdp.Audio.Attrs = aAttrs
+			sdp.Audio.SendOnly = aSendOnly
+			sdp.Audio.RecvOnly = aRecvOnly
+			sdp.Audio.Inactive = aInactive
+			sdp.Audio.SetupRole = aSetupRole
+			sdp.Audio.RtcpMux = aRtcpMux
+			sdp.Audio.Rtcp = &aRtcp
 		}
 	} else {
 		 // sdp.Video = nil
@@ -430,6 +573,19 @@ func Parse(s string) (sdp *SDP, err error) {
 		err = populateCodecs(sdp.Video, pts, vrtpmaps, vfmtps)
 		if err != nil {
 			return nil, err
+		} else {
+			sdp.Video.Fprint = vFprint
+			sdp.Video.IcePwd = vIcePwd
+			sdp.Video.IceUfrag = vIceUfrag
+			sdp.Video.Candidates = vCandidates
+			sdp.Video.Ssrcs = vSsrcs
+			sdp.Video.Attrs = vAttrs
+			sdp.Video.SendOnly = vSendOnly
+			sdp.Video.RecvOnly = vRecvOnly
+			sdp.Video.Inactive = vInactive
+			sdp.Video.SetupRole = vSetupRole
+			sdp.Video.RtcpMux = vRtcpMux
+			sdp.Video.Rtcp = &vRtcp
 		}
 	} else {
 		 // sdp.Video = nil
@@ -465,7 +621,13 @@ func (sdp *SDP) String() string {
 }
 
 func (sdp *SDP) Append(b *bytes.Buffer) {
-	if !sdp.IceOnly {
+	IceOnly := false
+	if sdp.Audio != nil {
+		IceOnly = sdp.Audio.IceOnly
+	} else if sdp.Video != nil {
+		IceOnly = sdp.Video.IceOnly
+	}
+	if !IceOnly {
 		b.WriteString("v=0\r\n")
 		sdp.Origin.Append(b)
 		b.WriteString("s=")
@@ -500,70 +662,13 @@ func (sdp *SDP) Append(b *bytes.Buffer) {
 	if sdp.Video != nil {
 		sdp.Video.Append("video", b)
 	}
-	for _, attr := range sdp.Attrs {
-		if attr[1] == "" {
-			b.WriteString("a=")
-			b.WriteString(attr[0])
-			b.WriteString("\r\n")
-		} else {
-			b.WriteString("a=")
-			b.WriteString(attr[0])
-			b.WriteString(":")
-			b.WriteString(attr[1])
-			b.WriteString("\r\n")
-		}
-	}
 	if sdp.Ptime > 0 {
 		b.WriteString("a=ptime:")
 		b.WriteString(strconv.Itoa(sdp.Ptime))
 		b.WriteString("\r\n")
 	}
-	if sdp.Fprint != nil {
-		sdp.Fprint.Append(b)
-	}
-	if sdp.IcePwd == "" {
-	} else {
-		b.WriteString("a=ice-pwd:")
-		b.WriteString(sdp.IcePwd)
-		b.WriteString("\r\n")		
-	}
-	if sdp.IceUfrag == "" {
-	} else {
-		b.WriteString("a=ice-ufrag:")
-		b.WriteString(sdp.IceUfrag)
-		b.WriteString("\r\n")		
-	}
-	for i, _ := range sdp.Candidates {
-		sdp.Candidates[i].Append(b)
-	}
-	for i, _ := range sdp.Ssrcs {
-		sdp.Ssrcs[i].Append(b)
-	}
 	if sdp.Group != nil {
 		sdp.Group.Append(b)
-	}
-	if sdp.SetupRole == "" {
-	} else {
-		b.WriteString("a=setup:")
-		b.WriteString(sdp.SetupRole)
-		b.WriteString("\r\n")		
-	}
-	if !sdp.IceOnly {
-		if sdp.SendOnly {
-			b.WriteString("a=sendonly\r\n")
-		} else if sdp.RecvOnly {
-			b.WriteString("a=recvonly\r\n")
-		} else if sdp.Inactive {
-			b.WriteString("a=inactive\r\n")
-		} else {
-			b.WriteString("a=sendrecv\r\n")
-		}
-	}
-	if sdp.RtcpMux {
-		b.WriteString("a=rtcp-mux\r\n")
-	}
-	if sdp.Rtcp != nil {
-		sdp.Rtcp.Append(b)
 	}
 	// save unknown field
 	if sdp.Other != nil {
