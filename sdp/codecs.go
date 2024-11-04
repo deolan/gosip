@@ -34,7 +34,7 @@ package sdp
 
 var (
 	ULAWCodec = Codec{PT: 0, Name: "PCMU", Rate: 8000}
-	DTMFCodec = Codec{PT: 101, Name: "telephone-event", Rate: 8000, Fmtp: "0-16"}
+	DTMFCodec = Codec{PT: 101, Name: "telephone-event", Rate: 8000}
 	Opus      = Codec{PT: 111, Name: "opus", Rate: 48000, Param: "2"}
 
 	StandardCodecs = map[uint8]Codec{

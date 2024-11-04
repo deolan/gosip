@@ -19,6 +19,11 @@ import (
 	"strconv"
 )
 
+type Fmtp struct {
+	Name  	string
+	Value 	string
+}
+
 // Codec describes one of the codec lines in an SDP. This data will be
 // magically filled in if the rtpmap wasn't provided (assuming it's a well
 // known codec having a payload type less than 96.)
@@ -27,7 +32,7 @@ type Codec struct {
 	Name  string // e.g. PCMU, G729, telephone-event, etc.
 	Rate  int    // frequency in hertz.  usually 8000
 	Param string // sometimes used to specify number of channels
-	Fmtp  string // some extra info; i.e. dtmf might set as "0-16"
+	Fmtps []Fmtp // fmtp 
 }
 
 func (codec *Codec) Append(b *bytes.Buffer) {
@@ -42,11 +47,33 @@ func (codec *Codec) Append(b *bytes.Buffer) {
 		b.WriteString(codec.Param)
 	}
 	b.WriteString("\r\n")
+/*
 	if codec.Fmtp != "" {
 		b.WriteString("a=fmtp:")
 		b.WriteString(strconv.FormatInt(int64(codec.PT), 10))
 		b.WriteString(" ")
 		b.WriteString(codec.Fmtp)
+		b.WriteString("\r\n")
+	}
+*/
+	s := len(codec.Fmtps)
+	if s > 0 {
+		b.WriteString("a=fmtp:")
+		b.WriteString(strconv.FormatInt(int64(codec.PT), 10))
+		b.WriteString(" ")	
+		for i, ftmp := range codec.Fmtps {
+			if len(ftmp.Value) > 0 {
+				b.WriteString(ftmp.Name)
+				b.WriteString("=")
+				b.WriteString(ftmp.Value)					
+			} else {
+				b.WriteString(ftmp.Name)				
+
+			}
+			if i != s-1 {
+				b.WriteString(";")	
+			}
+		}
 		b.WriteString("\r\n")
 	}
 }
