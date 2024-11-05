@@ -716,7 +716,6 @@ func populateCodecs(media *Media, pts []uint8, rtpmaps []string, fmtps []string)
 		for _, fmtp := range fmtps {
 			if strings.HasPrefix(fmtp, prefix) {
 				fmtp1 := fmtp[len(prefix):]
-//////////
 				s := strings.ReplaceAll(fmtp1, " ", "")
 				toks := strings.Split(s, ";")
 				if toks != nil {
@@ -735,7 +734,6 @@ func populateCodecs(media *Media, pts []uint8, rtpmaps []string, fmtps []string)
 						}
 					}
 				}
-//////////
 			}
 		}
 	}
@@ -765,28 +763,6 @@ func parseRtpmapInfo(codec *Codec, s string) (err error) {
 	}
 	return nil
 }
-
-func parseFmtpInfo(codec *Codec, s string) (err error) {
-	toks := strings.Split(s, ";")
-	if toks != nil {
-
-	}
-
-	if toks != nil && len(toks) >= 2 {
-		codec.Name = toks[0]
-		codec.Rate, err = strconv.Atoi(toks[1])
-		if err != nil {
-			return errors.New("invalid rtpmap rate")
-		}
-		if len(toks) >= 3 {
-			codec.Param = toks[2]
-		}
-	} else {
-		return errors.New("invalid rtpmap")
-	}
-	return nil
-}
-
 
 // Give me the part of an "m=" line that looks like: "30126 RTP/AVP 0 101".
 func parseMediaInfo(s string) (port uint16, proto string, pts []uint8, err error) {
