@@ -725,7 +725,7 @@ func populateCodecs(media *Media, pts []uint8, rtpmaps []string, fmtps []string)
 						if t1 != nil {
 							sz := len(t1)
 							if sz == 1 {
-								codec.Fmtps[i].Name = t1[0]
+								codec.Fmtps[i].Value = t1[0]
 							} else if sz == 2 {
 								codec.Fmtps[i].Name = t1[0]
 								codec.Fmtps[i].Value = t1[1]

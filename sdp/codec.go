@@ -47,15 +47,6 @@ func (codec *Codec) Append(b *bytes.Buffer) {
 		b.WriteString(codec.Param)
 	}
 	b.WriteString("\r\n")
-/*
-	if codec.Fmtp != "" {
-		b.WriteString("a=fmtp:")
-		b.WriteString(strconv.FormatInt(int64(codec.PT), 10))
-		b.WriteString(" ")
-		b.WriteString(codec.Fmtp)
-		b.WriteString("\r\n")
-	}
-*/
 	s := len(codec.Fmtps)
 	if s > 0 {
 		b.WriteString("a=fmtp:")
@@ -63,12 +54,19 @@ func (codec *Codec) Append(b *bytes.Buffer) {
 		b.WriteString(" ")	
 		for i, ftmp := range codec.Fmtps {
 			if len(ftmp.Value) > 0 {
-				b.WriteString(ftmp.Name)
-				b.WriteString("=")
-				b.WriteString(ftmp.Value)					
+				if len(ftmp.Name) > 0 {
+					b.WriteString(ftmp.Name)
+					b.WriteString("=")
+					b.WriteString(ftmp.Value)
+				} else {
+					b.WriteString(ftmp.Value)
+				}				
 			} else {
-				b.WriteString(ftmp.Name)				
-
+				if len(ftmp.Name) > 0 {				
+					b.WriteString(ftmp.Name)
+				} else {
+					// empty element
+				}			
 			}
 			if i != s-1 {
 				b.WriteString(";")	
